@@ -34,3 +34,17 @@ export function formatDate(isoDate: string) {
     timeZone: "UTC",
   });
 }
+
+/** "12 Nov 2026, 3:10 pm" in India time, from a timestamp such as created_at. */
+export function formatDateTimeIndia(timestamp: string) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+  return date.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Asia/Kolkata",
+  });
+}

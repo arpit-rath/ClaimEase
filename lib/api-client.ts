@@ -9,14 +9,18 @@
  * failure to reach the backend at all.
  */
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { z } from "zod";
 import {
   API_ERROR_CODES,
   ClaimSchema,
+  FinanceReviewClaimSchema,
   type ApiErrorCode,
   type CategoriesResponse,
   type ClaimsListResponse,
   type CreateClaimRequest,
   type CreateClaimResponse,
+  type FinanceClaimReviewResponse,
+  type FinanceClaimsListResponse,
   type MeResponse,
 } from "@/types/api";
 
@@ -54,7 +58,11 @@ export type ApiFailure =
   /** The backend answered with the documented error shape. */
   | { kind: "api"; status: number; code: ApiErrorCode; message: string; fields?: Record<string, string[]> }
   /** The backend answered, but not in the documented shape. */
-  | { kind: "unexpected"; status: number };
+  | { kind: "unexpected"; status: number }
+  /** An authenticated call was attempted with no Supabase session in the browser. */
+  | { kind: "signed_out" }
+  /** Supabase sign-in is not available in the browser (e.g. missing public settings). */
+  | { kind: "auth_unavailable"; message: string };
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; failure: ApiFailure };
 
@@ -71,10 +79,14 @@ function isApiErrorBody(
   );
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  fetcher: (input: string, init: RequestInit) => Promise<Response> = fetch,
+): Promise<ApiResult<T>> {
   let response: Response;
   try {
-    response = await fetch(path, {
+    response = await fetcher(path, {
       ...init,
       cache: "no-store",
       headers: { Accept: "application/json", ...(init?.body ? { "Content-Type": "application/json" } : {}) },
@@ -130,5 +142,62 @@ export async function createClaim(body: CreateClaimRequest): Promise<ApiResult<C
   return { ok: true, data: { claim: claim.data } };
 }
 
-/** Fired after a claim is saved so panels showing claims can refresh. */
+/** Fired after a claim is saved or reviewed so panels showing claims can refresh. */
 export const CLAIMS_CHANGED_EVENT = "claimease:claims-changed";
+
+// ---------------------------------------------------------------------------
+// Finance Review (needs a signed-in user with finance access; the server checks).
+// ---------------------------------------------------------------------------
+
+/** Runs `request` with the Supabase access token, or reports why it can't. */
+async function authorizedRequest<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
+  try {
+    const { data, error } = await getSupabaseBrowserClient().auth.getSession();
+    if (error || !data.session) return { ok: false, failure: { kind: "signed_out" } };
+  } catch (cause) {
+    return {
+      ok: false,
+      failure: {
+        kind: "auth_unavailable",
+        message: cause instanceof Error ? cause.message : "Sign-in is not available.",
+      },
+    };
+  }
+  return request<T>(path, init, authenticatedFetch);
+}
+
+const FinanceClaimsListSchema = z.object({ claims: z.array(FinanceReviewClaimSchema) });
+
+/** Claims awaiting review (status submitted or flagged), newest first. */
+export async function getFinanceClaims(): Promise<ApiResult<FinanceClaimsListResponse>> {
+  const result = await authorizedRequest<unknown>("/api/finance/claims");
+  if (!result.ok) return result;
+  const parsed = FinanceClaimsListSchema.safeParse(result.data);
+  if (!parsed.success) return { ok: false, failure: { kind: "unexpected", status: 200 } };
+  return { ok: true, data: parsed.data };
+}
+
+async function reviewClaim(
+  claimId: number,
+  action: "approve" | "reject",
+  body?: { reason: string },
+): Promise<ApiResult<FinanceClaimReviewResponse>> {
+  const result = await authorizedRequest<{ claim?: unknown }>(
+    `/api/finance/claims/${encodeURIComponent(String(claimId))}/${action}`,
+    { method: "POST", ...(body ? { body: JSON.stringify(body) } : {}) },
+  );
+  if (!result.ok) return result;
+  const claim = ClaimSchema.safeParse(result.data?.claim);
+  if (!claim.success) return { ok: false, failure: { kind: "unexpected", status: 200 } };
+  return { ok: true, data: { claim: claim.data } };
+}
+
+/** Approves a claim. Succeeds only when the server confirms the new status. */
+export function approveClaim(claimId: number) {
+  return reviewClaim(claimId, "approve");
+}
+
+/** Rejects a claim with a required reason. Succeeds only when the server confirms. */
+export function rejectClaim(claimId: number, reason: string) {
+  return reviewClaim(claimId, "reject", { reason });
+}

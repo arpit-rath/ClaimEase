@@ -31,7 +31,8 @@ export default function LoginForm() {
         throw new Error("Supabase sign-in completed without creating a session.");
       }
 
-      router.replace("/claims");
+      // Sign-in is only needed for Finance Review; employees use the demo identity.
+      router.replace("/finance");
       router.refresh();
     } catch (error) {
       setErrorMessage(
@@ -67,7 +68,7 @@ export default function LoginForm() {
         />
       </label>
       {errorMessage && (
-        <p className="text-sm text-red-700" role="alert">
+        <p className="text-sm text-danger" role="alert">
           {errorMessage}
         </p>
       )}

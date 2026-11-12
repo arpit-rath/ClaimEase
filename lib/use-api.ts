@@ -52,5 +52,9 @@ export function describeFailure(failure: ApiFailure): string {
       return failure.message;
     case "unexpected":
       return `The server sent an unexpected response (HTTP ${failure.status}).`;
+    case "signed_out":
+      return "Please sign in to continue.";
+    case "auth_unavailable":
+      return failure.message;
   }
 }
