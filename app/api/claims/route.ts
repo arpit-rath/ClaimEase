@@ -8,7 +8,7 @@ import {
 } from "@/types/api";
 import { getCurrentEmployee, getCurrentEmployeeId } from "@/lib/server/current-employee";
 import { getPolicyRule, insertClaim, listClaims } from "@/lib/server/claims-repo";
-import { checkExpenseDate, checkPolicy, todayInIndia } from "@/lib/server/claim-rules";
+import { checkExpenseDate, evaluateClaimPolicy, todayInIndia } from "@/lib/server/claim-rules";
 import { apiError, serverError } from "@/lib/server/http";
 
 /** The signed-in employee's claims, newest first. */
@@ -41,7 +41,11 @@ export async function POST(request: Request) {
   }
   const input = parsed.data;
 
-  const dateRejection = checkExpenseDate(input.expense_date, todayInIndia());
+  // One "today" (India) for the whole request, so both checks agree.
+  const today = todayInIndia();
+
+  // Refuse bad dates before touching the database.
+  const dateRejection = checkExpenseDate(input.expense_date, today);
   if (dateRejection) return apiError(422, dateRejection.code, dateRejection.message);
 
   try {
@@ -49,15 +53,16 @@ export async function POST(request: Request) {
     if (!employee) return apiError(404, "NOT_FOUND", "Employee not found.");
 
     const rule = await getPolicyRule(input.category, employee.grade);
-    if (!rule) {
-      return apiError(
-        422,
-        "UNKNOWN_CATEGORY",
-        `No ${employee.grade} policy exists for category ${input.category}.`,
-      );
+
+    // The saved status and reason come only from this server-side decision.
+    const decision = evaluateClaimPolicy(
+      { category: input.category, amount: input.amount, expense_date: input.expense_date },
+      { grade: employee.grade, rule, today },
+    );
+    if (!decision.allowed) {
+      return apiError(decision.code === "VALIDATION_ERROR" ? 400 : 422, decision.code, decision.reason);
     }
 
-    const decision = checkPolicy(input.amount, input.has_receipt, employee.grade, rule);
     const claim = await insertClaim({
       employee_id: employee.id,
       category: input.category,
@@ -66,7 +71,7 @@ export async function POST(request: Request) {
       description: input.description,
       has_receipt: input.has_receipt,
       status: decision.status,
-      policy_check: decision.policy_check,
+      policy_check: decision.reason,
     });
 
     return Response.json({ claim } satisfies CreateClaimResponse, { status: 201 });

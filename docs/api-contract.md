@@ -145,13 +145,50 @@ The server checks the rules in this order:
 2. The date is more than 60 days ago: rejected with `422 EXPENSE_TOO_OLD`. Nothing is saved.
 3. No rule exists for the category at the employee's grade: rejected with `422 UNKNOWN_CATEGORY`.
 4. `amount` > `max_amount`: saved with `status: "flagged"` and `policy_check: "Above L2 limit of 800 for meals"`.
-5. Otherwise: saved with `status: "submitted"` and `policy_check: "Within policy"`.
+5. Otherwise (including exactly `max_amount`): saved with `status: "submitted"` and `policy_check: "Within policy"`.
+
+`has_receipt` is stored with the claim but does not change its status. Only the amount limit flags a claim.
+
+The status and `policy_check` saved come only from the server's policy decision below. Anything the browser shows before submitting is a hint, never the decision.
 
 Response `201`:
 
 ```json
 { "claim": { "id": 16, "employee_id": "E001", "category": "meals", "amount": 650, "expense_date": "2026-11-10", "description": "Lunch during Pune client visit", "has_receipt": true, "status": "submitted", "policy_check": "Within policy", "created_at": "2026-11-12T09:30:00+00:00" } }
 ```
+
+## Policy decision (server only)
+
+Owner: Member 4. Code: `evaluateClaimPolicy()` in `lib/server/claim-rules.ts`, tests in `lib/server/claim-rules.test.ts`. It is a pure function (no database or network) called by `POST /api/claims` after loading the employee and rule. It never runs in the browser.
+
+Inputs:
+
+| Input | Source |
+|---|---|
+| `category`, `amount`, `expense_date` | The validated request body |
+| `grade` | The signed-in employee's row in `employees` (never the request) |
+| `rule` | The `policy_rules` row for (`category`, `grade`), or `null` |
+| `today` | `todayInIndia()`: today's date in Asia/Kolkata, `YYYY-MM-DD` |
+
+Result:
+
+```ts
+type PolicyDecision =
+  | { allowed: true; status: "submitted" | "flagged"; limit: number; reason: string }
+  | { allowed: false; code: "VALIDATION_ERROR" | "FUTURE_DATE" | "EXPENSE_TOO_OLD" | "UNKNOWN_CATEGORY"; reason: string };
+```
+
+- `allowed: true`: the claim is saved with `status`, and `reason` is saved as `policy_check`. `limit` is the `max_amount` applied.
+- `allowed: false`: nothing is saved. The route returns `code` with HTTP 400 (`VALIDATION_ERROR`) or 422 (the others), and `reason` as the message.
+
+Checks run in this order and stop at the first refusal:
+
+1. Amount is a finite number above 0, and `expense_date` is a real calendar date (`2026-02-30` is refused).
+2. Date: after today is refused (`FUTURE_DATE`); more than 60 days before today is refused (`EXPENSE_TOO_OLD`).
+3. Rule: missing, or for a different category or grade, is refused (`UNKNOWN_CATEGORY`). No default limit is guessed.
+4. Amount: above `max_amount` gives `flagged` with `Above <grade> limit of <max_amount> for <category>`; otherwise `submitted` with `Within policy`.
+
+Date convention: dates are whole calendar days. Age = today (India) − `expense_date`. Age 0 to 60 is allowed, 61 or more is refused, negative is a future date. Example with today = 2026-11-12: 2026-09-13 (60 days) is allowed, 2026-09-12 (61 days) is refused.
 
 ## Planned
 

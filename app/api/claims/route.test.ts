@@ -138,12 +138,36 @@ describe("POST /api/claims validation", () => {
     );
   });
 
-  it("saves a flagged claim with every applicable reason", async () => {
+  it.each([
+    ["below the limit", 799.99, "submitted", "Within policy"],
+    ["exactly at the limit", 800, "submitted", "Within policy"],
+    ["above the limit", 800.01, "flagged", "Above L2 limit of 800 for meals"],
+  ])("saves an amount %s with the server's decision", async (_case, amount, status, reason) => {
     const response = await POST(
       request(
         JSON.stringify({
           category: "meals",
-          amount: 801,
+          amount,
+          expense_date: "2026-11-12",
+          description: "Lunch while travelling",
+          has_receipt: true,
+        }),
+      ),
+    );
+
+    expect(response.status).toBe(201);
+    expect(mocks.insertClaim).toHaveBeenCalledTimes(1);
+    expect(mocks.insertClaim).toHaveBeenCalledWith(
+      expect.objectContaining({ amount, status, policy_check: reason }),
+    );
+  });
+
+  it("does not flag a claim only because there is no receipt", async () => {
+    const response = await POST(
+      request(
+        JSON.stringify({
+          category: "meals",
+          amount: 500,
           expense_date: "2026-11-12",
           description: "Lunch while travelling",
           has_receipt: false,
@@ -153,12 +177,49 @@ describe("POST /api/claims validation", () => {
 
     expect(response.status).toBe(201);
     expect(mocks.insertClaim).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: "flagged",
-        policy_check:
-          "Above L2 limit of 800 for meals; Missing receipt: meals claims above ₹300 require a receipt",
-      }),
+      expect.objectContaining({ has_receipt: false, status: "submitted", policy_check: "Within policy" }),
     );
+  });
+
+  it("looks up the rule with the employee's grade from the database, not the request", async () => {
+    mocks.getCurrentEmployee.mockResolvedValue({ ...employee, grade: "L1" });
+    mocks.getPolicyRule.mockResolvedValue({ ...mealsRule, grade: "L1", max_amount: 500 });
+
+    const response = await POST(
+      request(
+        JSON.stringify({
+          category: "meals",
+          amount: 600,
+          expense_date: "2026-11-12",
+          description: "Lunch while travelling",
+          has_receipt: true,
+        }),
+      ),
+    );
+
+    expect(response.status).toBe(201);
+    expect(mocks.getPolicyRule).toHaveBeenCalledWith("meals", "L1");
+    expect(mocks.insertClaim).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "flagged", policy_check: "Above L1 limit of 500 for meals" }),
+    );
+  });
+
+  it("rejects a request that tries to set its own status or employee", async () => {
+    const response = await POST(
+      request(
+        JSON.stringify({
+          category: "meals",
+          amount: 100,
+          expense_date: "2026-11-12",
+          description: "Lunch while travelling",
+          status: "approved",
+          employee_id: "E004",
+        }),
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.insertClaim).not.toHaveBeenCalled();
   });
 
   it("rejects a missing category/grade policy rule", async () => {

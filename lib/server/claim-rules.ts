@@ -7,14 +7,17 @@ import {
 } from "@/types/api";
 
 /**
- * PS5 policy rules, applied on the server only.
+ * PS5 policy rules, applied on the server only (POST /api/claims).
  *   1. Expense date cannot be in the future.
- *   2. Expenses older than 60 days cannot be claimed.
+ *   2. Expenses older than 60 days cannot be claimed (exactly 60 days is allowed).
  *   3. Amount above the grade's max_amount for the category -> saved as 'flagged' with the reason.
- *   4. Missing receipt above the rule's receipt_required_above -> saved as 'flagged' with the reason.
+ *      At or below max_amount -> saved as 'submitted', "Within policy".
  *
- * Pure functions with no I/O, so they can be tested directly and moved
- * into lib/policy/ if Member 4 takes them over.
+ * "Today" is the calendar date in India (Asia/Kolkata). Dates are compared as
+ * whole calendar days, never as timestamps.
+ *
+ * Pure functions with no I/O, so they can be tested directly.
+ * Contract: docs/api-contract.md, "Policy decision".
  */
 
 export const MAX_EXPENSE_AGE_DAYS = 60;
@@ -29,6 +32,14 @@ export function todayInIndia(now: Date = new Date()): string {
     month: "2-digit",
     day: "2-digit",
   }).format(now);
+}
+
+/** True for a real calendar date written as "YYYY-MM-DD" (so not 2026-02-30). */
+export function isValidIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
 }
 
 function toUtcDay(isoDate: string): number {
@@ -72,26 +83,85 @@ export function checkAmount(amount: number, grade: Grade, rule: PolicyRule): Amo
   return { status: "submitted", policy_check: WITHIN_POLICY };
 }
 
-/** Applies amount and receipt rules together, retaining every flag reason. */
-export function checkPolicy(
-  amount: number,
-  hasReceipt: boolean,
-  grade: Grade,
-  rule: PolicyRule,
-): AmountDecision {
+// ---------------------------------------------------------------------------
+// Policy decision: the single result claim creation uses.
+// ---------------------------------------------------------------------------
+
+export type PolicyInput = {
+  category: string;
+  amount: number;
+  /** "YYYY-MM-DD" */
+  expense_date: string;
+};
+
+export type PolicyContext = {
+  /** The signed-in employee's grade, read from the employees table. */
+  grade: Grade;
+  /** The policy_rules row for (category, grade), or null if none exists. */
+  rule: PolicyRule | null;
+  /** Today in India as "YYYY-MM-DD" (see todayInIndia). */
+  today: string;
+};
+
+export type PolicyDecision =
+  /** The claim may be saved with this status and reason. */
+  | {
+      allowed: true;
+      status: Extract<ClaimStatus, "submitted" | "flagged">;
+      /** The max_amount that was applied, in rupees. */
+      limit: number;
+      /** Saved as claims.policy_check. */
+      reason: string;
+    }
+  /** The claim must not be saved. */
+  | {
+      allowed: false;
+      code: Extract<ApiErrorCode, "VALIDATION_ERROR" | "FUTURE_DATE" | "EXPENSE_TOO_OLD" | "UNKNOWN_CATEGORY">;
+      reason: string;
+    };
+
+/**
+ * Decides whether a claim may be saved and with which status.
+ * Checks run in a fixed order and stop at the first refusal:
+ * input sanity, date (future, then older than 60 days), matching rule, amount.
+ * Never guesses: missing or mismatched data is refused, not defaulted.
+ */
+export function evaluateClaimPolicy(input: PolicyInput, context: PolicyContext): PolicyDecision {
+  const { amount, expense_date, category } = input;
+  const { grade, rule, today } = context;
+
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
+    return { allowed: false, code: "VALIDATION_ERROR", reason: "Amount must be a number above 0." };
+  }
+  if (!isValidIsoDate(expense_date)) {
+    return { allowed: false, code: "VALIDATION_ERROR", reason: "Expense date must be a real date (YYYY-MM-DD)." };
+  }
+  if (!isValidIsoDate(today)) {
+    throw new Error(`Policy check needs today's date as YYYY-MM-DD, got "${today}".`);
+  }
+
+  const dateRejection = checkExpenseDate(expense_date, today);
+  if (dateRejection) {
+    return {
+      allowed: false,
+      code: dateRejection.code as "FUTURE_DATE" | "EXPENSE_TOO_OLD",
+      reason: dateRejection.message,
+    };
+  }
+
+  if (!rule || rule.category !== category || rule.grade !== grade) {
+    return {
+      allowed: false,
+      code: "UNKNOWN_CATEGORY",
+      reason: `No ${grade} policy exists for category ${category}.`,
+    };
+  }
+
   const amountDecision = checkAmount(amount, grade, rule);
-  const reasons: string[] = [];
-
-  if (amountDecision.status === "flagged") {
-    reasons.push(amountDecision.policy_check);
-  }
-  if (!hasReceipt && amount > rule.receipt_required_above) {
-    reasons.push(
-      `Missing receipt: ${rule.category} claims above ₹${rule.receipt_required_above} require a receipt`,
-    );
-  }
-
-  return reasons.length > 0
-    ? { status: "flagged", policy_check: reasons.join("; ") }
-    : amountDecision;
+  return {
+    allowed: true,
+    status: amountDecision.status === "flagged" ? "flagged" : "submitted",
+    limit: rule.max_amount,
+    reason: amountDecision.policy_check,
+  };
 }
