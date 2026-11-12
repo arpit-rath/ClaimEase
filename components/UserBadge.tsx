@@ -4,13 +4,28 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Button, { buttonClasses } from "@/components/ui/Button";
+import { demoUser } from "@/lib/demo-user";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+/**
+ * Shows the demo employee (the claim pages always act as E001) and the
+ * Supabase sign-in state used by authenticated routes such as Finance Review.
+ */
 export default function UserBadge() {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const { name, employeeId, grade } = demoUser;
 
   useEffect(() => {
     let active = true;
@@ -61,28 +76,42 @@ export default function UserBadge() {
   }
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      {email ? (
-        <div className="flex items-center gap-2">
-          <span className="hidden max-w-40 truncate text-sm sm:block" title={email}>
-            {email}
-          </span>
+    <div className="flex flex-col items-end gap-1 justify-self-end">
+      <div className="flex items-center gap-3">
+        <span className="sr-only">
+          Employee: {name}, {employeeId}, grade {grade}
+        </span>
+        <div className="hidden text-right leading-tight sm:block" aria-hidden="true">
+          <div className="text-sm font-semibold">{name}</div>
+          <div className="flex items-center justify-end gap-1.5 font-mono text-xs text-muted">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+            {employeeId} · Grade {grade}
+          </div>
+        </div>
+        <span
+          aria-hidden="true"
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface-3 text-sm font-semibold"
+        >
+          {initials(name)}
+        </span>
+        {email ? (
           <Button
             loading={isSigningOut}
             onClick={signOut}
             size="sm"
-            variant="secondary"
+            variant="ghost"
+            title={`Signed in as ${email}`}
           >
             Sign out
           </Button>
-        </div>
-      ) : (
-        <Link className={buttonClasses({ size: "sm", variant: "secondary" })} href="/login">
-          Sign in
-        </Link>
-      )}
+        ) : (
+          <Link className={buttonClasses({ size: "sm", variant: "ghost" })} href="/login">
+            Sign in
+          </Link>
+        )}
+      </div>
       {errorMessage && (
-        <span className="max-w-56 text-right text-xs text-red-700" role="status">
+        <span className="max-w-56 text-right text-xs text-danger" role="status">
           {errorMessage}
         </span>
       )}

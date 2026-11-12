@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import Card from "@/components/ui/Card";
-import PageHeader from "@/components/ui/PageHeader";
+import { Zap } from "lucide-react";
+import NewClaimView from "@/components/claim/NewClaimView";
+import PolicyHighlightsPanel from "@/components/claim/PolicyHighlightsPanel";
+import RecentClaimsPanel from "@/components/claim/RecentClaimsPanel";
 
 export const metadata: Metadata = {
   title: "New Claim",
@@ -8,18 +10,26 @@ export const metadata: Metadata = {
 
 export default function NewClaimPage() {
   return (
-    <section className="flex flex-1 flex-col">
-      <PageHeader
-        title="New claim"
-        description="Describe what you spent in your own words. You can review and correct the details before submitting."
-      />
-      <Card className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-        <p className="text-sm text-muted">For example</p>
-        <p className="max-w-md rounded-lg bg-accent-soft px-4 py-3 text-accent">
-          “I spent ₹2,400 on a client dinner yesterday, submit it.”
-        </p>
-        <p className="text-sm text-muted">The chat assistant will appear here.</p>
-      </Card>
-    </section>
+    <div className="grid flex-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px] xl:gap-8">
+      <section className="flex flex-col gap-6">
+        <header>
+          <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-accent">
+            <Zap className="h-4 w-4" aria-hidden="true" />
+            Plain-language expense filing
+          </p>
+          <h1 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl">New claim</h1>
+          <p className="mt-3 max-w-3xl text-lg text-muted">
+            Describe what you spent in your own words. ClaimEase picks out the amount, date and
+            category, and you review everything before it&apos;s filed.
+          </p>
+        </header>
+        <NewClaimView />
+      </section>
+
+      <aside className="flex flex-col gap-6" aria-label="Claim overview">
+        <RecentClaimsPanel />
+        <PolicyHighlightsPanel />
+      </aside>
+    </div>
   );
 }

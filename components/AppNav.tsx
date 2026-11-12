@@ -13,7 +13,10 @@ export default function AppNav({ className }: { className?: string }) {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Main" className={cn("flex gap-1 rounded-lg bg-background p-1", className)}>
+    <nav
+      aria-label="Main"
+      className={cn("flex gap-1 rounded-xl border border-border bg-surface-2 p-1", className)}
+    >
       {links.map(({ href, label }) => {
         const active = pathname === href;
         return (
@@ -22,12 +25,13 @@ export default function AppNav({ className }: { className?: string }) {
             href={href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex-1 rounded-md px-4 py-1.5 text-center text-sm font-medium transition-colors sm:flex-none",
+              "flex flex-1 items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-medium transition-colors sm:flex-none",
               active
-                ? "bg-surface text-foreground shadow-sm ring-1 ring-border"
+                ? "bg-accent-soft text-accent ring-1 ring-accent/40"
                 : "text-muted hover:text-foreground",
             )}
           >
+            {active && <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent" />}
             {label}
           </Link>
         );

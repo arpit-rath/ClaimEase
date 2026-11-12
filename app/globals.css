@@ -1,34 +1,29 @@
 @import "tailwindcss";
 
+/* ClaimEase uses a single dark navy theme. */
 :root {
-  --background: #f6f7f8;
-  --surface: #ffffff;
-  --foreground: #18181b;
-  --muted: #5b5b66;
-  --border: #e4e4e7;
-  --accent: #0f766e;
-  --accent-hover: #115e59;
-  --accent-foreground: #ffffff;
-  --accent-soft: #e6f4f2;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0b0b0d;
-    --surface: #16161a;
-    --foreground: #f4f4f5;
-    --muted: #a1a1aa;
-    --border: #2a2a30;
-    --accent: #2dd4bf;
-    --accent-hover: #5eead4;
-    --accent-foreground: #042f2e;
-    --accent-soft: #0d2b28;
-  }
+  color-scheme: dark;
+  --background: #0a1520;
+  --surface: #0e1b28;
+  --surface-2: #0b1621;
+  --surface-3: #13253a;
+  --foreground: #e8eef4;
+  --muted: #8a9aac;
+  --border: #1c2d3d;
+  --accent: #2fd29a;
+  --accent-hover: #4fe0ad;
+  --accent-foreground: #032a1c;
+  --accent-soft: #2fd29a1f;
+  --warning: #f2b544;
+  --danger: #f87171;
+  --info: #7cb7ff;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-border: var(--border);
@@ -36,6 +31,9 @@
   --color-accent-hover: var(--accent-hover);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent-soft: var(--accent-soft);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
