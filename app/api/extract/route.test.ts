@@ -17,17 +17,32 @@ vi.mock("@/lib/ai/gemini", async () => {
 
 import { POST } from "@/app/api/extract/route";
 import { AiUnavailableError } from "@/lib/ai/gemini";
+import { ACCESS_COOKIE, createAccessToken } from "@/lib/server/app-gate";
 
-const post = (body: unknown) =>
-  POST(new Request("http://localhost/api/extract", { method: "POST", body: JSON.stringify(body) }));
+const post = (body: unknown, unlocked = true) =>
+  POST(
+    new Request("http://localhost/api/extract", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: unlocked ? { cookie: `${ACCESS_COOKIE}=${createAccessToken("orbit-2026")}` } : {},
+    }),
+  );
 
 describe("POST /api/extract", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("APP_PASSWORD", "orbit-2026");
     mocks.getCurrentEmployee.mockResolvedValue({ id: "E001", grade: "L2" });
     mocks.listPolicyRules.mockResolvedValue([
       { category: "client_entertainment", grade: "L2", max_amount: 3000, receipt_required_above: 0, notes: "Client meals" },
     ]);
+  });
+
+  it("refuses without the team passcode cookie and never calls Gemini", async () => {
+    const response = await post({ message: "lunch 500" }, false);
+    expect(response.status).toBe(401);
+    expect(mocks.getCurrentEmployee).not.toHaveBeenCalled();
+    expect(mocks.generateJson).not.toHaveBeenCalled();
   });
 
   it("rejects an empty message without calling the AI", async () => {

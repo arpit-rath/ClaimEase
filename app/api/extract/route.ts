@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ExtractRequestSchema, type ExtractResponse } from "@/types/api";
 import { AiUnavailableError, generateJson } from "@/lib/ai/gemini";
 import { buildExtractionPrompt, EMPTY_DRAFT, extractionSchema, finishExtraction } from "@/lib/ai/extract";
+import { hasAppAccess } from "@/lib/server/app-gate";
 import { todayInIndia } from "@/lib/server/claim-rules";
 import { listPolicyRules } from "@/lib/server/claims-repo";
 import { getCurrentEmployee } from "@/lib/server/current-employee";
@@ -15,6 +16,11 @@ import { apiError, serverError } from "@/lib/server/http";
  */
 export async function POST(request: Request) {
   await connection();
+
+  // Checked here as well as in proxy.ts: this route spends the Gemini quota.
+  if (!hasAppAccess(request)) {
+    return apiError(401, "UNAUTHORIZED", "Enter the team passcode first.");
+  }
 
   let body: unknown;
   try {
