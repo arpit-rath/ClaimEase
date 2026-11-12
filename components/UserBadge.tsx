@@ -100,12 +100,13 @@ export default function UserBadge() {
             onClick={signOut}
             size="sm"
             variant="ghost"
+            className="whitespace-nowrap"
             title={`Signed in as ${email}`}
           >
             Sign out
           </Button>
         ) : (
-          <Link className={buttonClasses({ size: "sm", variant: "ghost" })} href="/login">
+          <Link className={buttonClasses({ size: "sm", variant: "ghost", className: "whitespace-nowrap" })} href="/login">
             Sign in
           </Link>
         )}
