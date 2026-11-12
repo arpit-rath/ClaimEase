@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Plus } from "lucide-react";
+import MyClaimsView from "@/components/claims/MyClaimsView";
 import { buttonClasses } from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
-import EmptyState from "@/components/ui/EmptyState";
-import PageHeader from "@/components/ui/PageHeader";
 
 export const metadata: Metadata = {
   title: "My Claims",
@@ -11,28 +10,20 @@ export const metadata: Metadata = {
 
 export default function MyClaimsPage() {
   return (
-    <section className="flex flex-col">
-      <PageHeader
-        title="My claims"
-        description="Track the status of everything you have submitted."
-        actions={
-          <Link href="/claims/new" className={buttonClasses()}>
-            New claim
-          </Link>
-        }
-      />
-      <Card>
-        <EmptyState
-          icon={
-            <svg viewBox="0 0 24 24" aria-hidden="true" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" />
-              <path d="M9 8h6M9 12h6" />
-            </svg>
-          }
-          title="Claims list coming soon"
-          description="Your claims will show here once this page is connected to the backend."
-        />
-      </Card>
+    <section className="flex flex-col gap-6">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight">My claims</h1>
+          <p className="mt-2 text-lg text-muted">
+            Everything you&apos;ve submitted, newest first. Claims awaiting review haven&apos;t been decided
+            by finance yet.
+          </p>
+        </div>
+        <Link href="/claims/new" className={buttonClasses({ className: "shrink-0" })}>
+          <Plus className="h-4 w-4" aria-hidden="true" /> New claim
+        </Link>
+      </header>
+      <MyClaimsView />
     </section>
   );
 }

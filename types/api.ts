@@ -113,6 +113,33 @@ export const CreateClaimRequestSchema = z.strictObject({
 });
 export type CreateClaimRequest = z.input<typeof CreateClaimRequestSchema>;
 
+/**
+ * Claim details gathered so far in the New Claim chat. Every field may be
+ * unknown (null). This is a suggestion only: nothing is saved until the
+ * employee confirms and POST /api/claims accepts it.
+ */
+export const ClaimDraftSchema = z.object({
+  category: ClaimCategorySchema.nullable(),
+  amount: z.number().positive().nullable(),
+  expense_date: z.iso.date().nullable(),
+  description: z.string().max(500).nullable(),
+  has_receipt: z.boolean().nullable(),
+});
+export type ClaimDraft = z.infer<typeof ClaimDraftSchema>;
+
+/** Fields a draft needs before it can be submitted. */
+export const REQUIRED_DRAFT_FIELDS = ["amount", "expense_date", "category", "description"] as const;
+export type RequiredDraftField = (typeof REQUIRED_DRAFT_FIELDS)[number];
+
+/** POST /api/extract body. */
+export const ExtractRequestSchema = z.strictObject({
+  /** What the employee typed. */
+  message: z.string().trim().min(1).max(1000),
+  /** Details from earlier in the conversation, so a follow-up answer fills the gaps. */
+  draft: ClaimDraftSchema.optional(),
+});
+export type ExtractRequest = z.input<typeof ExtractRequestSchema>;
+
 // ---------------------------------------------------------------------------
 // Responses
 // ---------------------------------------------------------------------------
@@ -123,6 +150,14 @@ export type ClaimsListResponse = { claims: Claim[] };
 export type FinanceClaimsListResponse = { claims: FinanceReviewClaim[] };
 export type FinanceClaimReviewResponse = { claim: Claim };
 export type CreateClaimResponse = { claim: Claim };
+export type ExtractResponse = {
+  /** Merged details: earlier draft plus anything new in this message. */
+  draft: ClaimDraft;
+  /** Required fields still unknown. */
+  missing: RequiredDraftField[];
+  /** The assistant's chat reply (a follow-up question when something is missing). */
+  reply: string;
+};
 
 export const API_ERROR_CODES = [
   "VALIDATION_ERROR", // 400: body is not valid JSON or fails the schema
@@ -133,6 +168,7 @@ export const API_ERROR_CODES = [
   "FORBIDDEN", // 403: authenticated user lacks required authorization
   "CLAIM_NOT_REVIEWABLE", // 409: claim is not awaiting finance review
   "NOT_FOUND", // 404
+  "AI_UNAVAILABLE", // 503: the assistant could not be reached or gave an unusable answer
   "SERVER_ERROR", // 500
 ] as const;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];

@@ -3,10 +3,9 @@
 import { useId, useState } from "react";
 import Link from "next/link";
 import { z } from "zod";
-import { Check, Info, Pencil, Plus, RotateCw } from "lucide-react";
+import { Check, Info, Pencil, Plus, RotateCw, Sparkles } from "lucide-react";
 import Alert from "@/components/ui/Alert";
 import Button, { buttonClasses } from "@/components/ui/Button";
-import ExampleTag from "@/components/ui/ExampleTag";
 import { cn } from "@/lib/cn";
 import { CLAIMS_CHANGED_EVENT, createClaim, getCategories, type ApiFailure } from "@/lib/api-client";
 import { formatDate, formatInr, formatInrExact } from "@/lib/format";
@@ -14,7 +13,7 @@ import { categoryLabel, STATUS_META } from "@/lib/labels";
 import { describeFailure, useApiQuery } from "@/lib/use-api";
 import { CreateClaimRequestSchema, type Claim, type CreateClaimRequest } from "@/types/api";
 
-export type ClaimDraft = {
+export type FormDraft = {
   category: string;
   /** Kept as typed so the field can be empty or mid-edit. */
   amount: string;
@@ -61,7 +60,7 @@ const fieldLabel = "text-xs text-muted";
 const inputClass =
   "mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground focus:border-accent focus:outline-none disabled:opacity-60";
 
-function validate(draft: ClaimDraft) {
+function validate(draft: FormDraft) {
   const parsed = CreateClaimRequestSchema.safeParse({
     category: draft.category,
     amount: draft.amount.trim() === "" ? Number.NaN : Number(draft.amount),
@@ -80,30 +79,43 @@ function validate(draft: ClaimDraft) {
 }
 
 type ReviewCardProps = {
-  initialDraft: ClaimDraft;
-  /** True while the details are the example prefill rather than the assistant's extraction. */
-  isExample?: boolean;
+  initialDraft: FormDraft;
   /** Blank form used by "Start a new claim". */
-  blankDraft: ClaimDraft;
+  blankDraft: FormDraft;
+  /** Shown until the employee edits, e.g. to mark the details as an AI suggestion. */
+  label?: string;
+  /** Open with the fields editable (e.g. when details are still missing). */
+  startEditing?: boolean;
+  /** Called after the server saves the claim. */
+  onSaved?: (claim: Claim) => void;
+  /** Called when the employee starts another claim from this card. */
+  onStartNew?: () => void;
 };
 
-export default function ReviewCard({ initialDraft, blankDraft, isExample = false }: ReviewCardProps) {
+export default function ReviewCard({
+  initialDraft,
+  blankDraft,
+  label,
+  startEditing = false,
+  onSaved,
+  onStartNew,
+}: ReviewCardProps) {
   const id = useId();
   const categories = useApiQuery(getCategories);
 
   const [draft, setDraft] = useState(initialDraft);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(startEditing);
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const [showExampleTag, setShowExampleTag] = useState(isExample);
+  const [showLabel, setShowLabel] = useState(Boolean(label));
 
   const saved = outcome?.kind === "saved";
   const locked = submitting || saved;
   const fieldErrors = outcome?.kind === "invalid" ? outcome.fields : {};
 
-  const update = <K extends keyof ClaimDraft>(key: K, value: ClaimDraft[K]) => {
+  const update = <K extends keyof FormDraft>(key: K, value: FormDraft[K]) => {
     setDraft((d) => ({ ...d, [key]: value }));
-    setShowExampleTag(false);
+    setShowLabel(false);
   };
 
   const rules = categories.state.status === "success" ? categories.state.data.categories : [];
@@ -129,6 +141,7 @@ export default function ReviewCard({ initialDraft, blankDraft, isExample = false
       setOutcome({ kind: "saved", claim: result.data.claim });
       setEditing(false);
       window.dispatchEvent(new Event(CLAIMS_CHANGED_EVENT));
+      onSaved?.(result.data.claim);
       return;
     }
 
@@ -147,7 +160,8 @@ export default function ReviewCard({ initialDraft, blankDraft, isExample = false
     setDraft(blankDraft);
     setOutcome(null);
     setEditing(true);
-    setShowExampleTag(false);
+    setShowLabel(false);
+    onStartNew?.();
   }
 
   return (
@@ -186,7 +200,12 @@ export default function ReviewCard({ initialDraft, blankDraft, isExample = false
           )}
           <FieldError messages={fieldErrors.amount} />
         </div>
-        {showExampleTag && <ExampleTag label="Example values" className="self-start" />}
+        {showLabel && label && (
+          <span className="inline-flex items-center gap-1.5 self-start rounded-full border border-accent/30 bg-accent-soft px-3 py-1.5 text-sm text-accent">
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+            {label}
+          </span>
+        )}
       </div>
 
       {/* Category, date, description */}

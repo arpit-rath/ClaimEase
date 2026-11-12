@@ -10,8 +10,8 @@ export const metadata: Metadata = {
 
 export default function NewClaimPage() {
   return (
-    <div className="grid flex-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px] xl:gap-8">
-      <section className="flex flex-col gap-6">
+    <div className="grid flex-1 grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px] xl:gap-8">
+      <section className="flex min-w-0 flex-col gap-6">
         <header>
           <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-accent">
             <Zap className="h-4 w-4" aria-hidden="true" />

@@ -1,16 +1,19 @@
 import type { ReactNode } from "react";
-import { Zap } from "lucide-react";
+import { AlertTriangle, Zap } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 type ChatMessageProps = {
   from: "user" | "assistant";
   /** Short initials shown beside the employee's own messages. */
   initials?: string;
+  /** "error" styles an assistant message that reports a problem. */
+  tone?: "normal" | "error";
   children: ReactNode;
 };
 
-export default function ChatMessage({ from, initials, children }: ChatMessageProps) {
+export default function ChatMessage({ from, initials, tone = "normal", children }: ChatMessageProps) {
   const isUser = from === "user";
+  const isError = !isUser && tone === "error";
 
   return (
     <div className={cn("flex items-start gap-3", isUser && "flex-row-reverse")}>
@@ -20,17 +23,21 @@ export default function ChatMessage({ from, initials, children }: ChatMessagePro
           "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-sm font-semibold",
           isUser
             ? "border-border bg-surface-3 text-foreground"
-            : "border-accent/40 bg-accent-soft text-accent",
+            : isError
+              ? "border-danger/40 bg-danger/10 text-danger"
+              : "border-accent/40 bg-accent-soft text-accent",
         )}
       >
-        {isUser ? initials : <Zap className="h-4 w-4" />}
+        {isUser ? initials : isError ? <AlertTriangle className="h-4 w-4" /> : <Zap className="h-4 w-4" />}
       </span>
       <div
         className={cn(
           "max-w-[85%] rounded-2xl px-5 py-3.5 leading-relaxed sm:max-w-xl",
           isUser
             ? "rounded-tr-sm bg-accent font-medium text-accent-foreground"
-            : "rounded-tl-sm border border-border bg-surface-3 text-foreground",
+            : isError
+              ? "rounded-tl-sm border border-danger/30 bg-danger/10 text-foreground"
+              : "rounded-tl-sm border border-border bg-surface-3 text-foreground",
         )}
       >
         <span className="sr-only">{isUser ? "You said: " : "Assistant: "}</span>

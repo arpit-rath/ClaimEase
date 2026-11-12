@@ -190,6 +190,26 @@ Checks run in this order and stop at the first refusal:
 
 Date convention: dates are whole calendar days. Age = today (India) − `expense_date`. Age 0 to 60 is allowed, 61 or more is refused, negative is a future date. Example with today = 2026-11-12: 2026-09-13 (60 days) is allowed, 2026-09-12 (61 days) is refused.
 
-## Planned
+### `POST /api/extract`
 
-- `POST /api/extract`: turns a plain-language message into a draft `POST /api/claims` body. It waits on Member 3's `lib/ai/` interface.
+Reads a plain-language message into claim details for the employee to review. **Nothing is saved**, even if the message says "submit it": the employee confirms in the UI, which then calls `POST /api/claims`. The assistant never decides policy.
+
+Request:
+
+```json
+{ "message": "Took a cab to the client office in Guindy on Monday", "draft": { "category": null, "amount": null, "expense_date": null, "description": null, "has_receipt": null } }
+```
+
+`draft` is optional: send the previous response's `draft` so a follow-up answer ("It was 450 rupees") fills the gaps.
+
+Response `200`:
+
+```json
+{ "draft": { "category": "local_travel", "amount": null, "expense_date": "2026-11-09", "description": "Cab to client office in Guindy", "has_receipt": null }, "missing": ["amount"], "reply": "Could you please let me know the amount for this cab ride?" }
+```
+
+- `missing` lists required fields still unknown (`amount`, `expense_date`, `category`, `description`).
+- The server checks every field the AI returns: the category must be one of the employee's grade's rules, the amount must be above 0, and the date must be a real `YYYY-MM-DD`. Anything else is dropped, never guessed. Relative dates are resolved against today in India.
+- Code: `app/api/extract/route.ts`, `lib/ai/extract.ts` (prompt and checks), `lib/ai/gemini.ts` (Gemini client; tries the models in `GEMINI_MODEL` in turn, about 32 seconds at most).
+
+Errors: `400 VALIDATION_ERROR` (empty message), `503 AI_UNAVAILABLE` (Gemini overloaded, slow or unusable; the UI offers Try again and manual entry).

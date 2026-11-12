@@ -12,9 +12,13 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { z } from "zod";
 import {
   API_ERROR_CODES,
+  ClaimDraftSchema,
   ClaimSchema,
   FinanceReviewClaimSchema,
+  REQUIRED_DRAFT_FIELDS,
   type ApiErrorCode,
+  type ExtractRequest,
+  type ExtractResponse,
   type CategoriesResponse,
   type ClaimsListResponse,
   type CreateClaimRequest,
@@ -140,6 +144,21 @@ export async function createClaim(body: CreateClaimRequest): Promise<ApiResult<C
   const claim = ClaimSchema.safeParse((result.data as { claim?: unknown })?.claim);
   if (!claim.success) return { ok: false, failure: { kind: "unexpected", status: 201 } };
   return { ok: true, data: { claim: claim.data } };
+}
+
+const ExtractResponseSchema = z.object({
+  draft: ClaimDraftSchema,
+  missing: z.array(z.enum(REQUIRED_DRAFT_FIELDS)),
+  reply: z.string(),
+});
+
+/** Asks the assistant to read a message into claim details. Nothing is saved. */
+export async function extractClaim(body: ExtractRequest): Promise<ApiResult<ExtractResponse>> {
+  const result = await request<unknown>("/api/extract", { method: "POST", body: JSON.stringify(body) });
+  if (!result.ok) return result;
+  const parsed = ExtractResponseSchema.safeParse(result.data);
+  if (!parsed.success) return { ok: false, failure: { kind: "unexpected", status: 200 } };
+  return { ok: true, data: parsed.data };
 }
 
 /** Fired after a claim is saved or reviewed so panels showing claims can refresh. */
