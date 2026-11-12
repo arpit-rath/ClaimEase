@@ -3,20 +3,30 @@
 import { useRef, useState } from "react";
 import { CarTaxiFront, Plane, SendHorizontal, Utensils } from "lucide-react";
 import ChatMessage from "@/components/claim/ChatMessage";
-import ReviewCard from "@/components/claim/ReviewCard";
+import ReviewCard, { type ClaimDraft } from "@/components/claim/ReviewCard";
 import Card from "@/components/ui/Card";
 import ExampleTag from "@/components/ui/ExampleTag";
+import { isoDateInIndia } from "@/lib/dates";
 import { demoUser } from "@/lib/demo-user";
 import { exampleConversation, examplePrompts } from "@/lib/mocks/examples";
+import { useIsClient } from "@/lib/use-is-client";
 
 const promptIcons = { meal: Utensils, flight: Plane, cab: CarTaxiFront } as const;
 
-// Example categories for the edit dropdown; real ones will come from policy_rules.
-const exampleCategories = ["Meals & Entertainment", "Travel", "Local Conveyance", "Training"] as const;
+function exampleDraft(): ClaimDraft {
+  const { category, amount, daysAgo, description, has_receipt } = exampleConversation.extracted;
+  return { category, amount, expense_date: isoDateInIndia(-daysAgo), description, has_receipt };
+}
+
+function blankDraft(): ClaimDraft {
+  return { category: "", amount: "", expense_date: isoDateInIndia(0), description: "", has_receipt: false };
+}
 
 export default function NewClaimView() {
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  // The review card's default dates depend on today, so render it in the browser only.
+  const isClient = useIsClient();
   const initials = demoUser.name
     .split(/\s+/)
     .map((p) => p[0])
@@ -55,7 +65,7 @@ export default function NewClaimView() {
             <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-accent shadow-[0_0_8px] shadow-accent" />
             Policy checks run on submit · Grade {demoUser.grade}
           </p>
-          <ExampleTag label="Example preview" />
+          <ExampleTag label="Example conversation" />
         </div>
 
         <div className="flex flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
@@ -64,7 +74,11 @@ export default function NewClaimView() {
           </ChatMessage>
           <ChatMessage from="assistant">{exampleConversation.assistantMessage}</ChatMessage>
           <div className="sm:pl-13">
-            <ReviewCard initial={exampleConversation.extracted} categories={exampleCategories} />
+            {isClient ? (
+              <ReviewCard initialDraft={exampleDraft()} blankDraft={blankDraft()} isExample />
+            ) : (
+              <div className="h-96 animate-pulse rounded-2xl border border-border bg-surface-2" aria-hidden="true" />
+            )}
           </div>
         </div>
 
@@ -94,7 +108,8 @@ export default function NewClaimView() {
             </button>
           </div>
           <p id="composer-note" className="mt-2 text-xs text-muted">
-            Preview only. Sending is enabled once the assistant and backend are connected.
+            Typing a message works once the assistant is connected. For now, edit the claim details
+            above and submit them.
           </p>
         </form>
       </Card>

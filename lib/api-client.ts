@@ -1,6 +1,28 @@
 "use client";
 
+/**
+ * The frontend's calls to the backend.
+ * Request/response formats: docs/api-contract.md and types/api.ts.
+ *
+ * The claim functions resolve to an ApiResult instead of throwing, so pages
+ * can show the exact outcome: the data, an error the backend sent, or a
+ * failure to reach the backend at all.
+ */
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import {
+  API_ERROR_CODES,
+  ClaimSchema,
+  type ApiErrorCode,
+  type CategoriesResponse,
+  type ClaimsListResponse,
+  type CreateClaimRequest,
+  type CreateClaimResponse,
+  type MeResponse,
+} from "@/types/api";
+
+// ---------------------------------------------------------------------------
+// Authenticated requests (Finance Review): sends the Supabase session token.
+// ---------------------------------------------------------------------------
 
 export async function authenticatedFetch(
   input: RequestInfo | URL,
@@ -21,3 +43,92 @@ export async function authenticatedFetch(
 
   return fetch(input, { ...init, headers });
 }
+
+// ---------------------------------------------------------------------------
+// Employee claim requests (act as the demo employee on the server).
+// ---------------------------------------------------------------------------
+
+export type ApiFailure =
+  /** The request never got a response (offline, server down, timeout). */
+  | { kind: "network" }
+  /** The backend answered with the documented error shape. */
+  | { kind: "api"; status: number; code: ApiErrorCode; message: string; fields?: Record<string, string[]> }
+  /** The backend answered, but not in the documented shape. */
+  | { kind: "unexpected"; status: number };
+
+export type ApiResult<T> = { ok: true; data: T } | { ok: false; failure: ApiFailure };
+
+function isApiErrorBody(
+  body: unknown,
+): body is { error: { code: ApiErrorCode; message: string; fields?: Record<string, string[]> } } {
+  if (typeof body !== "object" || body === null || !("error" in body)) return false;
+  const error = (body as { error: unknown }).error;
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    typeof (error as { message?: unknown }).message === "string" &&
+    (API_ERROR_CODES as readonly unknown[]).includes((error as { code?: unknown }).code)
+  );
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      cache: "no-store",
+      headers: { Accept: "application/json", ...(init?.body ? { "Content-Type": "application/json" } : {}) },
+    });
+  } catch {
+    return { ok: false, failure: { kind: "network" } };
+  }
+
+  let body: unknown = null;
+  try {
+    body = await response.json();
+  } catch {
+    // Not JSON: handled below as an unexpected response.
+  }
+
+  if (!response.ok) {
+    if (isApiErrorBody(body)) {
+      const { code, message, fields } = body.error;
+      return { ok: false, failure: { kind: "api", status: response.status, code, message, fields } };
+    }
+    return { ok: false, failure: { kind: "unexpected", status: response.status } };
+  }
+
+  if (body === null) return { ok: false, failure: { kind: "unexpected", status: response.status } };
+  return { ok: true, data: body as T };
+}
+
+export function getMe() {
+  return request<MeResponse>("/api/me");
+}
+
+export function getCategories() {
+  return request<CategoriesResponse>("/api/categories");
+}
+
+export function getClaims() {
+  return request<ClaimsListResponse>("/api/claims");
+}
+
+/**
+ * Creates a claim. Succeeds only when the backend returns 201 with a claim in
+ * the documented shape, so the UI never reports a claim as saved otherwise.
+ */
+export async function createClaim(body: CreateClaimRequest): Promise<ApiResult<CreateClaimResponse>> {
+  const result = await request<CreateClaimResponse>("/api/claims", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  if (!result.ok) return result;
+
+  const claim = ClaimSchema.safeParse((result.data as { claim?: unknown })?.claim);
+  if (!claim.success) return { ok: false, failure: { kind: "unexpected", status: 201 } };
+  return { ok: true, data: { claim: claim.data } };
+}
+
+/** Fired after a claim is saved so panels showing claims can refresh. */
+export const CLAIMS_CHANGED_EVENT = "claimease:claims-changed";
